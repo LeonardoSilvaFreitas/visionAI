@@ -1,7 +1,7 @@
 const vision = require('@google-cloud/vision');
 
 const client = new vision.ImageAnnotatorClient({
-  keyFilename: 'visionai-457219-9925dee5928f.json',
+  keyFilename: 'visionai-457219-bb85d0595e00.json',
 });
 
 async function isImageViolent(imagePath) {

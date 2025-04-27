@@ -1,47 +1,81 @@
-const vision = require('@google-cloud/vision');
+const { Storage } = require('@google-cloud/storage');
+const { VideoIntelligenceServiceClient } = require('@google-cloud/video-intelligence');
+const storage = new Storage({ keyFilename: 'visionai-457219-bb85d0595e00.json' });
+const videoClient = new VideoIntelligenceServiceClient();
 
-const client = new vision.ImageAnnotatorClient({
-  keyFilename: 'visionai-457219-9925dee5928f.json',
-});
+async function analyzeVideo(videoFilename) {
+  const bucketName = 'bucketexemplo_2'; // Nome do seu bucket
+  const gcsUri = `gs://${bucketName}/${videoFilename}`; // Caminho do vídeo no bucket
 
-function riskLevel(pagesCount) {
-  if (pagesCount === 0) return 'Risco baixo ✅';
-  if (pagesCount <= 2) return 'Risco moderado ⚠️';
-  return 'Risco alto 🚨';
-}
+  const features = ['LABEL_DETECTION', 'SHOT_CHANGE_DETECTION', 'EXPLICIT_CONTENT_DETECTION'];
 
-async function checkImageForCopyrightRisk(imagePath) {
+  const request = {
+    inputUri: gcsUri,
+    features: features,
+  };
+
+  console.log(`Iniciando análise do vídeo ${videoFilename} no bucket ${bucketName}...`);
+
   try {
-    const [result] = await client.webDetection(imagePath);
-    const webDetection = result.webDetection;
+    // Iniciar análise do vídeo
+    const [operation] = await videoClient.annotateVideo(request);
 
-    const pages = webDetection.pagesWithMatchingImages || [];
-    const entities = webDetection.webEntities || [];
+    console.log('Analisando o vídeo...');
+    const [operationResult] = await operation.promise();
 
-    // 1. Mostrar total de páginas
-    console.log(`📄 Total de páginas com a imagem: ${pages.length}`);
+    // Exibindo os resultados da análise
+    console.log('Resultado da análise:');
 
-    // 2. Mostrar a marca ou entidade com score mais alto
-    const topEntity = entities.sort((a, b) => b.score - a.score)[0];
-    const entityName = topEntity?.description || 'Nenhuma marca detectada';
-    console.log(`🏷️ Marca ou entidade identificada: ${entityName}`);
+    let isMusical = false;
+    let hasExplicitContent = false;
+    let hasViolence = false;
 
-    // 3. Mostrar risco de uso
-    console.log(`⚠️ Nível de risco ao usar esta imagem: ${riskLevel(pages.length)}`);
+    if (operationResult.annotationResults) {
+      operationResult.annotationResults.forEach(result => {
+        // Verificação de conteúdo explícito (violência ou pornografia)
+        if (result.explicitAnnotation) {
+          const explicit = result.explicitAnnotation;
+          if (explicit.pornographyLikelihood >= 3) { // Considera conteúdo explícito se a probabilidade for >= 3 (provável)
+            hasExplicitContent = true;
+            console.log('O vídeo contém conteúdo explícito (pornografia).');
+          }
+          if (explicit.violenceLikelihood >= 3) { // Considera violência se a probabilidade for >= 3 (provável)
+            hasViolence = true;
+            console.log('O vídeo contém conteúdo de violência.');
+          }
+        }
 
-    // Extra: mostrar os sites onde a imagem pode estar (até 5)
-    if (pages.length > 0) {
-      console.log('\n🌐 Sites que podem conter a imagem:');
-      pages.slice(0, 5).forEach(page => console.log(`- ${page.url}`));
+        // Verificação de rótulos musicais
+        if (result.segmentLabelAnnotations) {
+          result.segmentLabelAnnotations.forEach(label => {
+            console.log(`Rótulo detectado: ${label.entity.description}`);
+            // Verifique se o vídeo contém termos relacionados à música
+            const musicKeywords = ['music', 'musical', 'song', 'performance', 'performance art'];
+            if (musicKeywords.some(keyword => label.entity.description.toLowerCase().includes(keyword))) {
+              if (!isMusical) {
+                isMusical = true;
+                console.log('Este vídeo contém conteúdo musical.');
+              }
+            }
+          });
+        }
+      });
     }
 
-    return pages.length > 0;
+    // Resultado final
+    if (!isMusical) {
+      console.log('Este vídeo NÃO contém conteúdo musical.');
+    }
+    if (!hasExplicitContent) {
+      console.log('Este vídeo NÃO contém conteúdo explícito (pornografia).');
+    }
+    if (!hasViolence) {
+      console.log('Este vídeo NÃO contém conteúdo de violência.');
+    }
 
   } catch (error) {
-    console.error('Erro ao analisar a imagem:', error);
-    return false;
+    console.error('Erro ao analisar o vídeo:', error);
   }
 }
 
-// Exemplo de uso
-checkImageForCopyrightRisk('violencia.jpg');
+analyzeVideo('dualipa.mp4'); // Substitua pelo nome do vídeo que você quer analisar

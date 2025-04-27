@@ -1,7 +1,7 @@
 const vision = require('@google-cloud/vision');
 
 const client = new vision.ImageAnnotatorClient({
-  keyFilename: '/home/eduardo-dovigi/key_vision_ai/visionaiexemplo-c79c5adb46d6.json',
+  keyFilename: 'visionai-457219-bb85d0595e00.json',
 });
 
 async function whereAmI(imagePath) {
